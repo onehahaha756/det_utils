@@ -94,6 +94,14 @@ def rect2txt(rect_list,out_path):
     out_file.close()
 
 def match_grid_rect(cur_grid,rect):
+    '''
+    if rect in grid then return True and the new rect in subpatch
+    cur_grid: [xmin:xmax,ymin:ymax]
+    rect :[xmin,ymin,xmax,ymax]
+    return
+    rect_in_grid : type bool
+    new_rect : new rect position in subpatch
+    '''
     annot_name=rect[0]
     #import pdb;pdb.set_trace()
     xmin,ymin,xmax,ymax=rect[1]
@@ -217,8 +225,8 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description="cut remote images into small patches ")
 
-    parser.add_argument('--input_imgdir',help="directory of exported annotation files")
-    parser.add_argument('--input_annotdir',help="directory of geoserver data")
+    parser.add_argument('--input_imgdir',help="directory of input images")
+    parser.add_argument('--input_annotdir',help="directory of the txt format annot")
     parser.add_argument('--save_dir',help="directory of output")
     parser.add_argument('--show_origin',default=True,type=str2bool,help="show origin labels")
     parser.add_argument('--resplit',default=False,type=str2bool,help="do not cut the dataset ,but only resplit train and testdata")
