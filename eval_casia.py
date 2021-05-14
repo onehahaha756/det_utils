@@ -4,10 +4,33 @@ import os.path as osp
 from typing import cast
 import numpy as np
 
-GTCLASS=['0'] #only one class
-def txt2polygons(txt_path):
+GTCLASS=['ship'] #only one class
+
+
+def str2bool(v):
+    return v.lower() in ("yes", "true", "t", "1")
+
+def txt2rect(txt_path):
     '''
-    casia ship v1 annot format:[[x1,y1,x2,y2,x3,y3,x4,y4],[....]]
+    rect annot format: x1,y1,x2,y2,cls
+    '''
+    rect_list = list()
+    txt_file=open(txt_path,encoding='utf-8')
+
+    for line in txt_file:
+        #import pdb;pdb.set_trace()
+        line=line.strip()
+        row_list=line.split()
+        rect=[int(float(x)) for x in row_list[:4]]
+        annot_name=row_list[-1]
+        rect_list.append((annot_name,rect))
+
+    txt_file.close()
+    return rect_list
+
+def DotaTxt2polygons(txt_path):
+    '''
+    dota annot format:x1,y1,x2,y2,x3,y3,x4,y4,cls,diffculty
     '''
     polygon_list = list()
     txt_file=open(txt_path,encoding='utf-8')
@@ -15,17 +38,10 @@ def txt2polygons(txt_path):
     for line in txt_file:
         #import pdb;pdb.set_trace()
         line=line.strip()
-        line=line.replace('[','')
-        line=line.replace(']','').replace(' ','')
-        row_list=line.split(',')
+        row_list=line.split()
         polygon=[int(float(x)) for x in row_list[:8]]
-
-        if len(row_list)>10:
-            annot_name=row_list[-2]
-        else :
-            annot_name='0'
+        annot_name=row_list[-2]
         polygon_list.append((annot_name,polygon))
-
     txt_file.close()
     return polygon_list
 
@@ -49,7 +65,7 @@ def polygons2rect(polygon_list):
 
     return rect_list
 
-def LoadTxtGt_casia(annot_dir):
+def LoadTxtGt(annot_dir,txttype='polygon'):
     '''
     annot_dir: txt labels dir
     return: 
@@ -63,10 +79,20 @@ def LoadTxtGt_casia(annot_dir):
     gt_dict={}
     for annot_path in annot_list:
         basename=osp.splitext(osp.basename(annot_path))[0]
-        polygon_list=txt2polygons(annot_path)
-        rect_list=polygons2rect(polygon_list)
+        if txttype=='polygon':
+            polygon_list=DotaTxt2polygons(annot_path)
+            rect_list=polygons2rect(polygon_list)
+        elif txttype=='rect':
+            rect_list=txt2rect(annot_path)
+        else:
+            print('erro! unrecognised annot type')
         gt_dict[basename]=rect_list
+    assert len(gt_dict.keys())!=0,'ground truth object is 0,please check your annotation directory!'
     return gt_dict
+def LoadTxtGt_rect(annot_dir):
+    '''
+    annot is rect : x1,y1,x2,y2,cls
+    '''
 
 def LoadDetfile(det_path):
     '''
@@ -77,9 +103,10 @@ def LoadDetfile(det_path):
     return: detfile
 
     '''
+    #import pdb;pdb.set_trace()
     detfile=open(det_path,'rb')
     det_dict = pickle.load(detfile)
-
+    
 
     return det_dict
 
@@ -117,13 +144,30 @@ def voc_ap(rec, prec, use_07_metric=True):
     return ap
 
 
-def casia_eval(annot_dir,det_path,imagesetfile,classname,ovthresh=0.5,conf_thre=0.3,use_07_metric=True):
+def casia_eval(annot_dir,annot_type,det_path,imagesetfile,classname,ovthresh=0.5,conf_thre=0.3,use_07_metric=True):
     '''
+    this is single class ap caculate code,for 
+    annot_dir:txt format annot_dir,txt format is:
+    annot_type: 
+        for polygon,annot txt format is:
+            line1:[x1,y1,x2,y2,x3,y3,x4,y4]
+            line2：,...,[....]]
+        for rect,annot txt format is:
+            line1:[x1,y1,x2,y2,cls]
+            ...
+    annot_path: polygon or rect
+    det_path: detections.pkl
+              detections.pkl saves a dict,its format is:
+              {imagename:[[x1,y1,x2,y2,confidece,cls],[...],[...]],
+               imagename:[....]
+               ....}  
+    imagesetfile: images nedd to evalutate
+    classname: classname in txt file
 
     '''
-    gt_dict=LoadTxtGt_casia(annot_dir)
+    gt_dict=LoadTxtGt(annot_dir,annot_type)
     det_dict=LoadDetfile(det_path)
-
+    
     with open(imagesetfile, 'r') as f:
         lines = f.readlines()
     imagenames = [x.strip() for x in lines]  
@@ -189,7 +233,9 @@ def casia_eval(annot_dir,det_path,imagesetfile,classname,ovthresh=0.5,conf_thre=
             cls_gtbboxs:[[(x1,y1,x2,y2),detflag],...]
             '''
             imgname=imageids[d]
+            #import pdb;pdb.set_trace()
             cls_gtbboxs=cls_gt[imgname]
+            #import pdb;pdb.set_trace()
 
             BBGT=np.array([bbox[0] for bbox in cls_gtbboxs])
             bb=BBox[d,:].astype(float)
@@ -225,100 +271,49 @@ def casia_eval(annot_dir,det_path,imagesetfile,classname,ovthresh=0.5,conf_thre=
 
         return rec,prec,ap
 
-
-def calculat_Precision(annot_dir,det_path,imagesetfile,ovthresh=0.5,conf_thre=0.3):
-    '''
-    for single cls detection evaluation
-    just caculate total presion and recall
-    '''
-    gt_dict=LoadTxtGt_casia(annot_dir)
-    det_dict=LoadDetfile(det_path)
-
-    with open(imagesetfile, 'r') as f:
-        lines = f.readlines()
-    imagenames = [x.strip() for x in lines]
-    #import pdb;pdb.set_trace()
-    TP=0
-    FP=0
-    GtNums=0 # groudtruth nums
-    for imagename in imagenames:
-        if not imagename in det_dict.keys():
-            continue
-        #load gts and dets
-        gts=gt_dict[imagename]
-        dets=det_dict[imagename]
-        # for single class
-        GtNums+=len(gts)
-        #
-        detected_flag=np.zeros(len(gts))
-
-        #get gt bbox
-        BBGT=np.array([x[1] for x in gts])
-        #get detction confidence and bbox
-        confidence=np.array([float(x[-2]) for x in dets])
-        BBox=np.array([[float(z) for z in x[:-2]] for x in dets])
-
-        # rm confidence below confidence threshhold
-        select_mask=confidence>conf_thre
-        confidence=confidence[select_mask]
-        BBox=BBox[select_mask]
-
-        #import pdb;pdb.set_trace()
-        #sort by confidence
-        sorted_ind=np.argsort(-confidence)
-        sorted_scores=np.sort(confidence)
-        BBox=BBox[sorted_ind,:]
-
-
-        nd=BBox.shape[0]
-        tp=np.zeros(nd)
-        fp=np.zeros(nd)
-        # mark dets and mark TPs and FPs
-        for d in range(nd):
-            bb=BBox[d,:].astype(float)
-            ixmin = np.maximum(BBGT[:, 0], bb[0])
-            iymin = np.maximum(BBGT[:, 1], bb[1])
-            ixmax = np.minimum(BBGT[:, 2], bb[2])
-            iymax = np.minimum(BBGT[:, 3], bb[3])
-
-            iw = np.maximum(ixmax - ixmin, 0.)
-            ih = np.maximum(iymax - iymin, 0.)
-            inters = iw * ih
-            uni = ((bb[2] - bb[0]) * (bb[3] - bb[1]) +
-                       (BBGT[:, 2] - BBGT[:, 0]) *
-                       (BBGT[:, 3] - BBGT[:, 1]) - inters)
-            overlaps = inters / uni
-            ovmax = np.max(overlaps)
-            jmax = np.argmax(overlaps)
-
-            if ovmax > ovthresh:
-                if not detected_flag[jmax]:
-                    tp[d] = 1.
-                    detected_flag[jmax] = 1
-                else:
-                    fp[d] = 1.
-            else:
-                fp[d] = 1.
-        #import pdb;pdb.set_trace()
-        TP+=np.sum(tp)
-        FP+=np.sum(fp)
-    Recall=TP/float(GtNums)
-    Precision= TP/np.maximum(TP + FP, np.finfo(np.float64).eps)  
-    return Recall,Precision
-#def cal_ap()    
-
-if __name__=='__main__':
-    annot_dir='/data/03_Datasets/CasiaDatasets/ship/label'
-    det_path='/data/02_code_implement/ssd.pytorch/MixShip/MixShip_iter5700/detections.pkl'
-    imagesetfile='/data/02_code_implement/ssd.pytorch/MixShip/MixShip_iter5700/inference_imgnames.txt'
+def test_samples():
+    annot_dir='/data/03_Datasets/CasiaDatasets/ship/labels_dota'
+    det_path='/data/02_code_implement/ssd.pytorch/MixShip/MixShip_iter40000/detections.pkl'
+    imagesetfile='/data/02_code_implement/ssd.pytorch/MixShip/MixShip_iter40000/infer.imgnames'
+    annot_type='polygon'
     overthre=0.5
     conf_thre=0.1
     clss=GTCLASS[0] #label is '0'
     #Recall,Precision=calculat_Precision(annot_dir,det_path,imagesetfile,overthre,conf_thre)
-    rec,prec,ap=casia_eval(annot_dir,det_path,imagesetfile,clss,overthre,conf_thre)
+    rec,prec,ap=casia_eval(annot_dir,annot_type,det_path,imagesetfile,clss,overthre,conf_thre)
     print('*'*15+\
          '\niou overthre:{}\nConfidence thre:{}\nAP:{}\nMaxRecall:{} \nMinPrecision: {}'\
         .format(overthre,conf_thre,ap,rec[-1],prec[-1]))
-    #import pdb;pdb.set_trace()
+
+if __name__=='__main__':
+
+    import argparse
+    parser = argparse.ArgumentParser(
+        description='evaluation object detecions performance,caculate aps')
+
+    parser.add_argument('--annot_dir', default='/data/03_Datasets/CasiaDatasets/ship/labels_dota',
+                        help='Location of txt format annotation directory')
+    parser.add_argument('--annot_type', default='rect',choices=['rect','polygon']
+                        ,help='for cutimages is rect,for dota annot is polygon')
+    parser.add_argument('--det_path', default='MixShip/MixShip_iter40000/detections.pkl',
+                        help='detection results path')
+    parser.add_argument('--imagesetfile', default='MixShip/MixShip_iter40000/infer.imgnames',
+                        help='test imagenames')
+    parser.add_argument('--clss', default='ship', type=str,
+                        help='annote class in txt file')
+    parser.add_argument('--iou_thre', default=0.3, type=float,
+                        help='evalution iou thre ')
+    parser.add_argument('--conf_thre', default=0.3, type=float,
+                        help='Detection confidence threshold')
+
+
+
+    args = parser.parse_args()
+    rec,prec,ap=casia_eval(args.annot_dir,args.annot_type,args.det_path,  
+                    args.imagesetfile,args.clss,args.iou_thre,args.conf_thre)
+    print('*'*15+\
+         '\niou overthre:{}\nConfidence thre:{}\nAP:{}\nMaxRecall:{} \nMinPrecision: {}'\
+        .format(args.iou_thre,args.conf_thre,ap,rec[-1],prec[-1]))
+   
 
 

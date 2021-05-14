@@ -17,9 +17,31 @@ from PIL import Image
 
 
 multil_type=['*.jpg','*.png','*.tif']
+dataset_annotname='ship'
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
+
+
+def CasiaTxt2polygons(txt_path,annot_name=dataset_annotname):
+    '''
+    casia ship v1 annot format:[[x1,y1,x2,y2,x3,y3,x4,y4],[....]]
+    '''
+    polygon_list = list()
+    txt_file=open(txt_path,encoding='utf-8')
+
+    for line in txt_file:
+        #import pdb;pdb.set_trace()
+        line=line.strip()
+        line=line.replace('[','')
+        line=line.replace(']','').replace(' ','')
+        row_list=line.split(',')
+        polygon=[int(float(x)) for x in row_list[:8]]
+
+        polygon_list.append((annot_name,polygon))
+
+    txt_file.close()
+    return polygon_list
 
 def txt2polygons(txt_path):
     '''
@@ -145,7 +167,7 @@ def vis_labels(img,rect_list,visname):
     #import pdb;pdb.set_trace()
     cv2.imwrite(visname, show_img)
 
-def cutimage2detect(input_imgdir,input_annotdir,save_dir,cut_size=512,overlap=50,vis=True,show_origin=True):
+def cutimage2detect(input_imgdir,input_annotdir,save_dir,cut_size=512,overlap=50,vis=True,show_origin=False):
     '''
     input_imgdir: images 
     input_annotdir: txt format annots
@@ -155,10 +177,11 @@ def cutimage2detect(input_imgdir,input_annotdir,save_dir,cut_size=512,overlap=50
             ./images
             ./labels
     '''
-    target_lable_dir=os.path.join(save_dir,'labels')
-    target_image_dir=os.path.join(save_dir,'images')
+    target_lable_dir=os.path.join(save_dir,'labelDota')
+    target_image_dir=os.path.join(save_dir,'image')
     target_vis_dir=os.path.join(save_dir,'vis_label')
     target_origin_vis_dir=os.path.join(save_dir,'vis_origin_label')
+
     if not osp.exists(save_dir):
         os.mkdir(save_dir)
     else:
@@ -170,19 +193,23 @@ def cutimage2detect(input_imgdir,input_annotdir,save_dir,cut_size=512,overlap=50
         os.mkdir(target_image_dir)
     if not os.path.exists(target_vis_dir):
         os.mkdir(target_vis_dir)
-    if not os.path.exists(target_origin_vis_dir):
-        os.mkdir(target_origin_vis_dir)
+
+    if show_origin:
+        if not os.path.exists(target_origin_vis_dir):
+            os.mkdir(target_origin_vis_dir)
     imglist=[]
     for imgtype in multil_type:
         imglist+=glob.glob(osp.join(input_imgdir,imgtype))
 
+    assert len(imglist) >0,'imgdir is empty please check your image directory path!'
+    
     for imgpath in tqdm(imglist):
         basename,suffix=osp.splitext(osp.basename(imgpath))
         annotpath=osp.join(input_annotdir,'{}.txt'.format(basename))
 
         img=cv2.imread(imgpath)
         
-        polygon_list=txt2polygons(annotpath)
+        polygon_list=CasiaTxt2polygons(annotpath)
 
         rect_list=polygons2rect(polygon_list)
 
@@ -228,7 +255,7 @@ if __name__ == '__main__':
     parser.add_argument('--input_imgdir',help="directory of input images")
     parser.add_argument('--input_annotdir',help="directory of the txt format annot")
     parser.add_argument('--save_dir',help="directory of output")
-    parser.add_argument('--show_origin',default=True,type=str2bool,help="show origin labels")
+    parser.add_argument('--show_origin',default=False,type=str2bool,help="show origin labels")
     parser.add_argument('--resplit',default=False,type=str2bool,help="do not cut the dataset ,but only resplit train and testdata")
     parser.add_argument('-c','--cut_size',type=int,default=512,help="cut patch sizes")
     parser.add_argument('-l','--overlap',type=int,default=50,help="overlap for cut")
@@ -237,7 +264,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     #only resplit the dataset,do not recut
     if args.resplit:
-        target_image_dir=os.path.join(args.save_dir,'images')
+        target_image_dir=os.path.join(args.save_dir,'image')
         split_traintest(target_image_dir,args.save_dir)
     else:
         cutimage2detect(args.input_imgdir,args.input_annotdir,args.save_dir,args.cut_size,args.overlap,args.show_origin)
