@@ -1,7 +1,8 @@
 #coding:utf-8
 import os,glob
 import os.path as osp
-
+import numpy as np
+from cut2dota import split_traintest,rect2txt,polygons2rect
 dataset_annotname='ship'
 
 def CasiaTxt2polygons(txt_path,annot_name=dataset_annotname):
@@ -33,31 +34,68 @@ def Polygons2DotaTxt(polygon_list,save_txt):
                         .format(x1,y1,x2,y2,x3,y3,x4,y4,annot_name,0))
     save_file.close()
 
-def main(data_dir,out_label_dir):
+# def polygons2rect(polygon_list):
+#     rect_list=[]
+#     for polygon in polygon_list:
+#         annot_name=polygon[0]
+#         rect=polygon[1:]
+#         rect_array=np.array(rect).reshape((-1,2))
+#        # import pdb;pdb.set_trace()
+#         xmin=rect_array[:,0].min()
+#         xmax=rect_array[:,0].max()
+#         ymin=rect_array[:,1].min()
+#         ymax=rect_array[:,1].max()
+
+#         rect_list.append((annot_name,(xmin,ymin,xmax,ymax)))
+
+#     return rect_list
+
+# def rect2txt(rect_list,out_path):
+#     out_file=open(out_path,'w',encoding='utf-8')
+#     for rect in rect_list:
+#         annot_name=rect[0]
+#         rect_area=rect[1] #xmin,ymin,xmax,ymax
+#         out_file.write('{} {} {} {} {}'.format(rect_area[0],rect_area[1],rect_area[2],rect_area[3],annot_name))
+#     out_file.close()
+
+def main(data_dir,out_dir):
     '''
     casia data_dir format is : ./image
                                ./label
     '''
+    out_labelDota_dir=osp.join(out_dir,'labelDota')
+    out_Rectlabel_dir=osp.join(out_dir,'labelRect')
+    if not osp.exists(out_labelDota_dir):
+        os.makedirs(out_labelDota_dir)
+    if not osp.exists(out_Rectlabel_dir):
+        os.makedirs(out_Rectlabel_dir)
+
     annot_dir=osp.join(data_dir,'label')
+    img_dir=osp.join(data_dir,'image')
     annot_list=glob.glob(osp.join(annot_dir,'*.txt'))
-    import pdb;pdb.set_trace()
+    #import pdb;pdb.set_trace()
 
     for annot_path in annot_list:
         polygon_list=CasiaTxt2polygons(annot_path)
-        basename=osp.basename(annot_path)
-        save_txt=osp.join(out_label_dir,'{}'.format(basename))
-        Polygons2DotaTxt(polygon_list,save_txt)
+        rect_list=polygons2rect(polygon_list)
+
+        basename=osp.splitext(osp.basename(annot_path))[0]
+        save_polygon_txt=osp.join(out_labelDota_dir,'{}.txt'.format(basename))
+        save_rect_txt=osp.join(out_Rectlabel_dir,'{}.txt'.format(basename))
+        
+        Polygons2DotaTxt(polygon_list,save_polygon_txt)
+        rect2txt(rect_list,save_rect_txt)
+    split_traintest(img_dir,out_dir)
 if __name__=='__main__':
     import argparse
 
     parser=argparse.ArgumentParser(description='turn Casia label to dota format labels')
 
     parser.add_argument('--data_dir',help='the directory of the casia dataset')
-    parser.add_argument('--out_label_dir',default='labelDota',help='the directory of the dota format labels')
-    #parser.add_argument('--annot_name',default='ship',help='default annot name')
+    parser.add_argument('--out_dir',default='labelDota',help='the directory of the dota format labels')
+    #parser.add_argument('--out_Rectlabel_dir',default='labelRect',help='the directory of the rect format labels')
 
     args=parser.parse_args()
-    if not osp.exists(args.out_label_dir):
-        os.makedirs(args.out_label_dir)
 
-    main(args.data_dir,args.out_label_dir)
+
+    main(args.data_dir,args.out_dir)

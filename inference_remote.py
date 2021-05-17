@@ -24,6 +24,7 @@ import warnings
 from tqdm import tqdm
 import os.path as osp
 from eval_casia import casia_eval
+from nms import nms
 
 warnings.filterwarnings("ignore")
 
@@ -107,6 +108,7 @@ def infer_bigpic(det_file,vis_dir, net, imglist,im_size=300, thresh=0.05,save_re
                                         scores[:, np.newaxis],cls_label[:,np.newaxis])).astype(np.float32,
                                                                        copy=False)
                     #save results
+                    nms_bboxes=nms(cls_dets,0.8,0.3)
                     for num in range(cls_dets.shape[0]):
                         all_boxes.append(cls_dets[num].tolist())
         det_results[basename]=all_boxes
