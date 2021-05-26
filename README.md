@@ -5,3 +5,7 @@ cause I often can't find my common codes,so I make the repository for save some 
 - cut big remote images to patches and turn the labels,and splite the train and test datasets
 - inference big remote images by select sub patches from the big remote image
 - eval codes in my format datasets
+- non maximum suppression codes
+- data augment for cut one object to another backgroud
+
+
