@@ -19,7 +19,8 @@ def CasiaTxt2polygons(txt_path,annot_name=dataset_annotname):
         line=line.replace(']','').replace(' ','')
         row_list=line.split(',')
         polygon=[int(float(x)) for x in row_list[:8]]
-
+        if len(polygon)<8:
+            continue
         polygon_list.append((annot_name,polygon))
 
     txt_file.close()
@@ -30,7 +31,7 @@ def Polygons2DotaTxt(polygon_list,save_txt):
     for polygon in polygon_list:
         annot_name,points=polygon
         x1,y1,x2,y2,x3,y3,x4,y4=points
-        save_file.write('{} {} {} {} {} {} {} {} {} {}' \
+        save_file.write('{} {} {} {} {} {} {} {} {} {}\n' \
                         .format(x1,y1,x2,y2,x3,y3,x4,y4,annot_name,0))
     save_file.close()
 
@@ -82,7 +83,7 @@ def main(data_dir,out_dir):
         basename=osp.splitext(osp.basename(annot_path))[0]
         save_polygon_txt=osp.join(out_labelDota_dir,'{}.txt'.format(basename))
         save_rect_txt=osp.join(out_Rectlabel_dir,'{}.txt'.format(basename))
-        
+        # import pdb;pdb.set_trace()    
         Polygons2DotaTxt(polygon_list,save_polygon_txt)
         rect2txt(rect_list,save_rect_txt)
     split_traintest(img_dir,out_dir)

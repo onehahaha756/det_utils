@@ -52,15 +52,10 @@ def txt2polygons(txt_path):
     for line in txt_file:
         #import pdb;pdb.set_trace()
         line=line.strip()
-        line=line.replace('[','')
-        line=line.replace(']','').replace(' ','')
-        row_list=line.split(',')
+        row_list=line.split()
         polygon=[int(float(x)) for x in row_list[:8]]
+        annot_name=row_list[-2]
 
-        if len(row_list)>10:
-            annot_name=row_list[-2]
-        else :
-            annot_name='0'
         polygon_list.append((annot_name,polygon))
 
     txt_file.close()
@@ -139,6 +134,11 @@ def cutsubimg(img,polygons,save_dir,cut_size=512,overlap=50):
     pass
 
 def split_traintest(img_dir,save_dir):
+    '''
+    split a image dir to train and test list
+    input: imgdir
+    do: write a trainfile and a testfile
+    '''
     train_file=open(os.path.join(save_dir,'train.txt'),'w')
     test_file=open(os.path.join(save_dir,'test.txt'),'w')
 
@@ -151,6 +151,15 @@ def split_traintest(img_dir,save_dir):
             train_file.write('{}\n'.format(basename))
     train_file.close()
     test_file.close()
+
+def write_imglist(img_dir,savetxt):
+    savefile=open(savetxt,'w',encoding='utf-8')
+
+    imglist=os.listdir(img_dir)
+    for imgpath in imglist:
+        basename=osp.splitext(imgpath)[0]
+        savefile.write('{}\n'.format(basename))
+    savefile.close()
 
 def vis_labels(img,rect_list,visname):
     show_img=img.copy()
@@ -178,38 +187,58 @@ def cutimage2detect(input_imgdir,input_annotdir,save_dir,cut_size=512,overlap=50
             ./labels
     '''
     target_lable_dir=os.path.join(save_dir,'labelDota')
-    target_image_dir=os.path.join(save_dir,'image')
+    target_imagetrain_dir=os.path.join(save_dir,'image','train')
+    target_imagetest_dir=os.path.join(save_dir,'image','test')
     target_vis_dir=os.path.join(save_dir,'vis_label')
     target_origin_vis_dir=os.path.join(save_dir,'vis_origin_label')
+
+    origin_trainlist=os.path.join(save_dir,'origin_train.txt')
+    origin_testlist=os.path.join(save_dir,'origin_test.txt')
 
     if not osp.exists(save_dir):
         os.mkdir(save_dir)
     else:
         shutil.rmtree(save_dir)
-        os.mkdir(save_dir)
+        os.makedirs(save_dir)
     if not os.path.exists(target_lable_dir):
         os.mkdir(target_lable_dir)
-    if not os.path.exists(target_image_dir):
-        os.mkdir(target_image_dir)
+    if not os.path.exists(target_imagetrain_dir):
+        os.makedirs(target_imagetrain_dir)
+    if not os.path.exists(target_imagetest_dir):
+        os.makedirs(target_imagetest_dir)
     if not os.path.exists(target_vis_dir):
         os.mkdir(target_vis_dir)
-
+    #show origin labels
     if show_origin:
         if not os.path.exists(target_origin_vis_dir):
             os.mkdir(target_origin_vis_dir)
+    #save train and test originlist
+    origin_trainfile=open(origin_trainlist,'w',encoding='utf-8')
+    origin_testfile=open(origin_testlist,'w',encoding='utf-8')
+
     imglist=[]
     for imgtype in multil_type:
         imglist+=glob.glob(osp.join(input_imgdir,imgtype))
 
     assert len(imglist) >0,'imgdir is empty please check your image directory path!'
     
+    target_imgdir=target_imagetrain_dir
     for imgpath in tqdm(imglist):
+            
         basename,suffix=osp.splitext(osp.basename(imgpath))
         annotpath=osp.join(input_annotdir,'{}.txt'.format(basename))
-
+        if random.random()<0.3:
+            target_imgdir=target_imagetest_dir
+            #save origin test list
+            origin_testfile.write('{}\n'.format(basename))
+        else:
+            target_imgdir=target_imagetrain_dir
+            #save origin train list
+            origin_trainfile.write('{}\n'.format(basename))
+        
         img=cv2.imread(imgpath)
         
-        polygon_list=CasiaTxt2polygons(annotpath)
+        polygon_list=txt2polygons(annotpath)
 
         rect_list=polygons2rect(polygon_list)
 
@@ -230,7 +259,7 @@ def cutimage2detect(input_imgdir,input_annotdir,save_dir,cut_size=512,overlap=50
                 save_name=basename+'{}'.format(i)
 
                 save_labelname=osp.join(target_lable_dir,'{}_{}.txt'.format(basename,i))
-                save_imgname=osp.join(target_image_dir,'{}_{}.jpg'.format(basename,i))
+                save_imgname=osp.join(target_imgdir,'{}_{}.jpg'.format(basename,i))
                 save_img=img[cur_grid[2]:cur_grid[3],cur_grid[0]:cur_grid[1],:]
 
                 #print('save image {}'.format(save_imgname))
@@ -241,11 +270,24 @@ def cutimage2detect(input_imgdir,input_annotdir,save_dir,cut_size=512,overlap=50
                 if vis:
                     vis_imgname=osp.join(target_vis_dir,'{}_{}.jpg'.format(basename,i))
                     vis_labels(save_img,new_rectlist,vis_imgname)
+            else:
+                #print('save img ',i)
+                save_imgname=osp.join(target_imgdir,'{}_{}.jpg'.format(basename,i))
+                save_img=img[cur_grid[2]:cur_grid[3],cur_grid[0]:cur_grid[1],:]
+                cv2.imwrite(save_imgname,save_img)
+
         if show_origin:
             showname=save_imgname=osp.join(target_origin_vis_dir,'{}.jpg'.format(basename))
             vis_labels(img,rect_list,showname)
 
-    split_traintest(target_image_dir,save_dir)
+    origin_trainfile.close()
+    origin_testfile.close()
+
+    traintxt=os.path.join(save_dir,'train.txt')
+    testtxt=os.path.join(save_dir,'test.txt')
+    write_imglist(target_imagetrain_dir,traintxt)
+    write_imglist(target_imagetest_dir,testtxt)
+    #split_traintest(target_image_dir,save_dir)
 
 
 if __name__ == '__main__':
@@ -255,7 +297,7 @@ if __name__ == '__main__':
     parser.add_argument('--input_imgdir',help="directory of input images")
     parser.add_argument('--input_annotdir',help="directory of the txt format annot")
     parser.add_argument('--save_dir',help="directory of output")
-    parser.add_argument('--show_origin',default=False,type=str2bool,help="show origin labels")
+    parser.add_argument('--vis_label',default=False,type=str2bool,help="show origin labels")
     parser.add_argument('--resplit',default=False,type=str2bool,help="do not cut the dataset ,but only resplit train and testdata")
     parser.add_argument('-c','--cut_size',type=int,default=512,help="cut patch sizes")
     parser.add_argument('-l','--overlap',type=int,default=50,help="overlap for cut")
@@ -265,9 +307,9 @@ if __name__ == '__main__':
     #only resplit the dataset,do not recut
     if args.resplit:
         target_image_dir=os.path.join(args.save_dir,'image')
-        split_traintest(target_image_dir,args.save_dir)
+        #split_traintest(target_image_dir,args.save_dir)
     else:
-        cutimage2detect(args.input_imgdir,args.input_annotdir,args.save_dir,args.cut_size,args.overlap,args.show_origin)
+        cutimage2detect(args.input_imgdir,args.input_annotdir,args.save_dir,args.cut_size,args.overlap,args.vis_label)
 
 
 
